@@ -1,11 +1,11 @@
 {
   "name": "NQueue",
-  "author": "redeye",
+  "author": "Florian Schulte",
   "flags": [],
   "api_version": 1,
   "publish": {
-    "tags": ["downloads", "queue", "updates"],
-    "description": "Fügt in der Steam-Download-Ansicht einen Button hinzu, der alle noch nicht eingeordneten Updates in die Queue einreiht.",
-    "image": ""
+    "tags": ["downloads", "queue", "updates", "library", "automation"],
+    "description": "Adds a floating button to the Steam Downloads page that queues all scheduled/planned updates with a single press — perfect for syncing a device that's used infrequently.",
+    "image": "assets/logo.png"
   }
 }

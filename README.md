@@ -1,42 +1,36 @@
-# NQueue (Decky Loader Plugin)
+# NQueue
 
-NQueue fügt in der **Steam-Download-Ansicht** einen Button hinzu:
+**Queue all your planned Steam updates in one press.**
 
-- **"Alle Updates einreihen"**
+NQueue adds a floating button to the Steam Downloads page. One press moves every scheduled ("Planned") update into the active download queue — ideal for a Steam Deck that sits unused between trips and needs to catch up on updates before you head out.
 
-Beim Klick werden alle sichtbaren Update-/Download-Aktionen für unten gelistete Einträge ausgelöst, die noch nicht in der Queue sind.
+## Features
 
-## Hinweis zur Robustheit
+- Floating **"Queue All Planned Updates"** button on the Downloads page
+- Same action available from the Decky quick-access panel
+- Automatically shows/hides based on whether the Downloads page is open
+- Fully localized button label (20+ languages follow Steam's language setting)
 
-Steam/Decky-UI-Klassen und Texte ändern sich gelegentlich. Dieses Plugin arbeitet deshalb mit einer heuristischen Suche auf sichtbaren Button-Texten (z. B. "Update", "Download", "Aktualisieren", "Fortsetzen") und überspringt typische Queue/Pause-Elemente.
+## Usage
 
-Falls Valve UI-Texte stark ändert, kann ein kleines Update der Regex nötig sein.
+1. Open **Downloads** in Steam.
+2. Press the floating button at the bottom of the screen — or open the Decky panel and press the button there.
+3. All scheduled updates are queued immediately.
 
-## Entwicklung
+## Why?
 
-```bash
-cd /home/redeye/projects/decky-nque
-pnpm install
-pnpm run build
-```
+If your Steam Deck only comes out for travel, games pile up with planned-but-not-started updates. This plugin lets you kick them all off at once while you're on Wi-Fi, so you're not waiting for updates on the road.
 
-## Installation auf Decky
+---
 
-1. Plugin bauen (`pnpm run build`)
-2. Den Plugin-Ordner mit mindestens folgenden Dateien nach Decky deployen:
-   - `dist/index.js`
-   - `plugin.json`
-   - `package.json`
-   - `main.py`
-3. Decky neu laden/Steam UI neu starten
+## Deutsch
 
-## Bedienung
+**Alle geplanten Steam-Updates mit einem Tastendruck einreihen.**
 
-- Öffne **Downloads** in Steam.
-- Unten rechts erscheint ein schwebender Button: **Alle Updates einreihen**.
-- Alternativ kannst du im Plugin-Panel den gleichen Trigger nutzen.
+NQueue fügt auf der Steam-Download-Seite einen schwebenden Button hinzu. Ein Klick verschiebt alle geplanten Updates sofort in die aktive Download-Warteschlange — ideal für ein Steam Deck, das zwischen Reisen längere Zeit nicht genutzt wird.
 
-## Dateien
+### Verwendung
 
-- `src/index.tsx`: Frontend-Logik (DOM-Beobachtung + Queue-Klicks)
-- `main.py`: Minimaler Decky-Backend-Lifecycle
+1. **Downloads** in Steam öffnen.
+2. Den schwebenden Button am unteren Bildschirmrand drücken — oder im Decky-Panel den Button verwenden.
+3. Alle geplanten Updates werden sofort eingereiht.

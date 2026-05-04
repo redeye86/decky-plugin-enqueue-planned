@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 process.chdir(__dirname);
 
 // ── Build flags ────────────────────────────────────────────────────────────
-const SHOW_BUILD_DATE = true;
+const SHOW_BUILD_DATE = false;
 // ──────────────────────────────────────────────────────────────────────────
 
 function buildFlags(flags) {
