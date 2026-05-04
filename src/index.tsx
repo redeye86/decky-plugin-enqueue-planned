@@ -1,115 +1,200 @@
-import {
-  ButtonItem,
-  PanelSection,
-  PanelSectionRow,
-  Navigation,
-  staticClasses
-} from "@decky/ui";
-import {
-  addEventListener,
-  removeEventListener,
-  callable,
-  definePlugin,
-  toaster,
-  // routerHook
-} from "@decky/api"
-import { useState } from "react";
-import { FaShip } from "react-icons/fa";
+import { ButtonItem, PanelSection, PanelSectionRow, staticClasses } from "@decky/ui";
+import { definePlugin, toaster, executeInTab } from "@decky/api";
+import { useCallback, useState } from "react";
+import { FaDownload } from "react-icons/fa";
 
-// import logo from "../assets/logo.png";
+// All DOM manipulation runs inside the "SP" tab (main Steam UI context) via executeInTab.
+// The plugin itself runs in an isolated Decky context and cannot access the Steam DOM directly.
 
-// This function calls the python function "add", which takes in two numbers and returns their sum (as a number)
-// Note the type annotations:
-//  the first one: [first: number, second: number] is for the arguments
-//  the second one: number is for the return value
-const add = callable<[first: number, second: number], number>("add");
+const SP_TAB = "SP";
 
-// This function calls the python function "start_timer", which takes in no arguments and returns nothing.
-// It starts a (python) timer which eventually emits the event 'timer_event'
-const startTimer = callable<[], void>("start_timer");
+// Injected once at plugin load: sets up a MutationObserver in the Steam UI
+// that shows/hides the footer button as the user navigates to/from the downloads page.
+const SETUP_SCRIPT = `(function() {
+  const BTN_ID = 'decky-nqueue-btn';
+  const OBS_KEY = '__nqueue_obs__';
+
+  window[OBS_KEY]?.disconnect();
+  document.getElementById(BTN_ID)?.remove();
+
+  function clickDownloads() {
+    const arrows = document.querySelectorAll('[data-rbd-droppable-id] path.DownloadArrow');
+    let n = 0;
+    for (const a of arrows) {
+      const btn = a.closest('button');
+      if (btn && !btn.disabled) { btn.click(); n++; }
+    }
+    return n;
+  }
+
+  function ensureButton() {
+    if (document.getElementById(BTN_ID)) return;
+    const footer = document.getElementById('Footer');
+    if (!footer) return;
+    if (!document.querySelector('[data-rbd-droppable-id]')) return;
+
+    const btn = document.createElement('button');
+    btn.id = BTN_ID;
+    btn.textContent = '\\u2193 Queue All';
+    btn.style.cssText = [
+      'margin-left:10px',
+      'padding:4px 14px',
+      'border-radius:6px',
+      'border:1px solid rgba(255,255,255,.3)',
+      'background:rgba(27,40,56,.95)',
+      'color:#fff',
+      'font-weight:700',
+      'font-size:13px',
+      'cursor:pointer',
+      'height:32px',
+      'z-index:9999',
+      'align-self:center',
+      'flex-shrink:0',
+    ].join(';');
+    btn.onclick = () => clickDownloads();
+    footer.appendChild(btn);
+  }
+
+  function refresh() {
+    if (document.querySelector('[data-rbd-droppable-id]')) {
+      ensureButton();
+    } else {
+      document.getElementById(BTN_ID)?.remove();
+    }
+  }
+
+  const obs = new MutationObserver(refresh);
+  obs.observe(document.body, { childList: true, subtree: true });
+  window[OBS_KEY] = obs;
+  refresh();
+  return 'ok';
+})()`;
+
+const CLEANUP_SCRIPT = `(function() {
+  window['__nqueue_obs__']?.disconnect();
+  delete window['__nqueue_obs__'];
+  document.getElementById('decky-nqueue-btn')?.remove();
+})()`;
+
+const ENQUEUE_SCRIPT = `(function() {
+  const arrows = document.querySelectorAll('[data-rbd-droppable-id] path.DownloadArrow');
+  let n = 0;
+  for (const a of arrows) {
+    const btn = a.closest('button');
+    if (btn && !btn.disabled) { btn.click(); n++; }
+  }
+  return n;
+})()`;
+
+const DEBUG_SCRIPT = `(function() {
+  const lists = Array.from(document.querySelectorAll('[data-rbd-droppable-id]'));
+  return JSON.stringify({
+    url: window.location.href,
+    hasFooter: !!document.getElementById('Footer'),
+    hasPopupTarget: !!document.getElementById('popup_target'),
+    droppableLists: lists.map(l => ({
+      id: l.getAttribute('data-rbd-droppable-id'),
+      listitems: l.querySelectorAll('[role="listitem"]').length,
+      downloadArrows: l.querySelectorAll('path.DownloadArrow').length,
+    })),
+  }, null, 2);
+})()`;
+
+async function runInSP(code: string): Promise<{ success: boolean; result: unknown }> {
+  return executeInTab(SP_TAB, false, code);
+}
+
+async function enqueuePlannedDownloads(): Promise<void> {
+  const res = await runInSP(ENQUEUE_SCRIPT);
+  if (!res.success) {
+    toaster.toast({ title: "NQueue", body: "Fehler: Steam-Tab nicht erreichbar.", duration: 5000 });
+    return;
+  }
+  const count = res.result as number;
+  toaster.toast({
+    title: "NQueue",
+    body: count > 0
+      ? `${count} geplante Downloads eingereiht.`
+      : "Keine geplanten Downloads gefunden.",
+    duration: 5000,
+  });
+}
 
 function Content() {
-  const [result, setResult] = useState<number | undefined>();
+  const [debugText, setDebugText] = useState<string>("Noch kein Debug-Output.");
 
-  const onClick = async () => {
-    const result = await add(Math.random(), Math.random());
-    setResult(result);
-  };
+  const onRun = useCallback(async () => {
+    await enqueuePlannedDownloads();
+  }, []);
+
+  const onDebug = useCallback(async () => {
+    const res = await runInSP(DEBUG_SCRIPT);
+    const text = res.success
+      ? `Tab erreichbar.\n${res.result as string}`
+      : `Tab NICHT erreichbar.\n${JSON.stringify(res)}`;
+    setDebugText(text);
+    toaster.toast({ title: "NQueue", body: "Debug aktualisiert.", duration: 3000 });
+  }, []);
 
   return (
-    <PanelSection title="Panel Section">
+    <PanelSection title="NQueue">
+      {__SHOW_BUILD_DATE__ && (
+        <PanelSectionRow>
+          <div style={{ fontSize: "10px", opacity: 0.5, fontFamily: "monospace" }}>
+            Build: {__BUILD_DATE__}
+          </div>
+        </PanelSectionRow>
+      )}
       <PanelSectionRow>
-        <ButtonItem
-          layout="below"
-          onClick={onClick}
-        >
-          {result ?? "Add two numbers via Python"}
+        <ButtonItem layout="below" onClick={onRun}>
+          Alle geplanten Updates einreihen
         </ButtonItem>
       </PanelSectionRow>
       <PanelSectionRow>
-        <ButtonItem
-          layout="below"
-          onClick={() => startTimer()}
-        >
-          {"Start Python timer"}
+        <ButtonItem layout="below" onClick={onDebug}>
+          Debug-Analyse
         </ButtonItem>
       </PanelSectionRow>
-
-      {/* <PanelSectionRow>
-        <div style={{ display: "flex", justifyContent: "center" }}>
-          <img src={logo} />
-        </div>
-      </PanelSectionRow> */}
-
-      {/*<PanelSectionRow>
-        <ButtonItem
-          layout="below"
-          onClick={() => {
-            Navigation.Navigate("/decky-plugin-test");
-            Navigation.CloseSideMenus();
+      <PanelSectionRow>
+        <div
+          style={{
+            width: "100%",
+            minHeight: "220px",
+            maxHeight: "360px",
+            overflowY: "auto",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            background: "rgba(0,0,0,0.35)",
+            border: "1px solid rgba(255,255,255,0.15)",
+            borderRadius: "8px",
+            padding: "10px",
+            fontFamily: "monospace",
+            fontSize: "11px",
+            lineHeight: 1.35,
           }}
         >
-          Router
-        </ButtonItem>
-      </PanelSectionRow>*/}
+          {debugText}
+        </div>
+      </PanelSectionRow>
     </PanelSection>
   );
-};
+}
 
 export default definePlugin(() => {
-  console.log("Template plugin initializing, this is called once on frontend startup")
-
-  // serverApi.routerHook.addRoute("/decky-plugin-test", DeckyPluginRouterTest, {
-  //   exact: true,
-  // });
-
-  // Add an event listener to the "timer_event" event from the backend
-  const listener = addEventListener<[
-    test1: string,
-    test2: boolean,
-    test3: number
-  ]>("timer_event", (test1, test2, test3) => {
-    console.log("Template got timer_event with:", test1, test2, test3)
-    toaster.toast({
-      title: "template got timer_event",
-      body: `${test1}, ${test2}, ${test3}`
-    });
-  });
+  // Inject button + observer into the Steam UI tab
+  runInSP(SETUP_SCRIPT).catch((e) =>
+    console.error("[NQueue] setup failed", e)
+  );
 
   return {
-    // The name shown in various decky menus
-    name: "Test Plugin",
-    // The element displayed at the top of your plugin's menu
-    titleView: <div className={staticClasses.Title}>Decky Example Plugin</div>,
-    // The content of your plugin's menu
+    name: "NQueue",
+    titleView: <div className={staticClasses.Title}>NQueue</div>,
     content: <Content />,
-    // The icon displayed in the plugin list
-    icon: <FaShip />,
-    // The function triggered when your plugin unloads
+    icon: <FaDownload />,
     onDismount() {
-      console.log("Unloading")
-      removeEventListener("timer_event", listener);
-      // serverApi.routerHook.removeRoute("/decky-plugin-test");
+      runInSP(CLEANUP_SCRIPT).catch((e) =>
+        console.error("[NQueue] cleanup failed", e)
+      );
     },
   };
 });
